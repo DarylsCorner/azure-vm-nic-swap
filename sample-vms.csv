@@ -1,0 +1,4 @@
+VMName,ResourceGroup,VNetResourceGroup,VNetName,SubnetName,NewNicIPAddress
+testvm1,rg-eastus,rg-eastus,testvm1-vnet,default,10.0.0.9
+testvm2,rg-eastus,rg-eastus,testvm2-vnet,default,10.0.0.10
+testvm3,rg-eastus,rg-eastus,testvm1-vnet,default,10.0.0.11

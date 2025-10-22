@@ -1,0 +1,32 @@
+# Log files
+*.log
+*.txt
+!sample-vms.csv
+
+# Test results
+test-results-summary-*.md
+
+# Azure CLI cache
+.azure/
+
+# PowerShell modules
+Modules/
+
+# VS Code settings
+.vscode/
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS specific files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
