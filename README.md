@@ -31,8 +31,7 @@ This script automates the process of replacing Azure VM NICs while preserving se
 - ✅ **Temporary IP Strategy** - Uses temporary IP during swap, then updates to final IP
 
 ### Post-Execution Features
-- ✅ **Automated Post-Test Verification** - Verifies each VM's new NIC configuration
-- ✅ **Auto-Generated Test Reports** - Creates comprehensive markdown summary
+- ✅ **Post-Execution Verification** - Verifies each VM's new NIC configuration
 - ✅ **IP Validation** - Confirms actual IP vs expected IP
 - ✅ **Allocation Verification** - Confirms Static IP allocation
 - ✅ **Detailed Logging** - Color-coded console output and file logs
@@ -227,9 +226,9 @@ The script includes comprehensive error handling:
 
 ## Output Files
 
-After execution, the script generates multiple output files:
+After execution, the script generates:
 
-### 1. Execution Log (`vm-nic-update-log.txt`)
+### Execution Log (`vm-nic-update-log.txt`)
 - **Console Output**: Color-coded messages (Errors=Red, Warnings=Yellow, Success=Green, Info=Blue)
 - **Log File**: Complete operation history with timestamps
 - **Default Location**: `.\vm-nic-update-log.txt`
@@ -240,32 +239,15 @@ After execution, the script generates multiple output files:
 - `WARNING`: Non-critical issues
 - `ERROR`: Critical failures
 
-### 2. Test Results Summary (`test-results-summary-<timestamp>.md`)
-Automatically generated comprehensive markdown report including:
-- **Test Metadata**: Date, start time, end time, duration
-- **Statistics**: Total VMs processed, success rate, counts
-- **Post-Test Verification Table**: All VMs with pass/fail status
-- **Detailed VM Results**: Individual VM configurations and IPs
-- **Script Configuration**: Parameters used during execution
-- **Conclusion**: Overall success/failure summary
-
 **Example Verification Output:**
 ```
 ========================================
-Post-Test Verification
+Post-Execution Verification
 ========================================
 VM: testvm1 | NIC: testvm1-nic-new | IP: 10.0.0.9 (Expected: 10.0.0.9) | Allocation: Static | Status: ✅ PASS
 VM: testvm2 | NIC: testvm2-nic-new | IP: 10.0.0.10 (Expected: 10.0.0.10) | Allocation: Static | Status: ✅ PASS
-Test results summary saved to: ./test-results-summary-20251021-170815.md
+VM: testvm3 | NIC: testvm3-nic-new | IP: 10.0.0.11 (Expected: 10.0.0.11) | Allocation: Static | Status: ✅ PASS
 ```
-
-**Benefits:**
-- ✅ No manual verification needed
-- ✅ Automatic documentation of test results
-- ✅ Easy to share results with stakeholders
-- ✅ Historical record of all test runs
-- ✅ Quick identification of any issues
-- ✅ Professional markdown format for reports
 
 ## Safety Features
 
@@ -304,7 +286,7 @@ Test results summary saved to: ./test-results-summary-20251021-170815.md
 ### Console Output
 ```
 [2025-10-21 16:59:32] [INFO] Starting VM NIC Update Process
-[2025-10-21 16:59:32] [SUCCESS] Authenticated to subscription: ME-MngEnvMCAP402392-daharrington-4
+[2025-10-21 16:59:32] [SUCCESS] Authenticated to subscription: your-subscription-name
 [2025-10-21 16:59:32] [SUCCESS] Successfully imported 3 VMs from CSV
 [2025-10-21 16:59:32] [INFO] Processing VM: testvm1
 [2025-10-21 16:59:35] [INFO] Original NIC: testvm1-nic
@@ -319,37 +301,14 @@ Test results summary saved to: ./test-results-summary-20251021-170815.md
 [2025-10-21 17:08:15] [INFO] Failed: 0
 
 ========================================
-Post-Test Verification
+Post-Execution Verification
 ========================================
 VM: testvm1 | NIC: testvm1-nic-new | IP: 10.0.0.9 (Expected: 10.0.0.9) | Allocation: Static | Status: ✅ PASS
 VM: testvm2 | NIC: testvm2-nic-new | IP: 10.0.0.10 (Expected: 10.0.0.10) | Allocation: Static | Status: ✅ PASS
 VM: testvm3 | NIC: testvm3-nic-new | IP: 10.0.0.11 (Expected: 10.0.0.11) | Allocation: Static | Status: ✅ PASS
-Test results summary saved to: ./test-results-summary-20251021-170815.md
 ```
 
-### Generated Summary File (`test-results-summary-<timestamp>.md`)
-```markdown
-# Azure VM NIC Replacement Test Results
-**Test Date:** October 21, 2025  
-**Start Time:** 16:59:32  
-**End Time:** 17:08:15  
-**Duration:** 8 minutes 43 seconds  
 
-## Test Overview
-- **Total VMs Processed:** 3
-- **Success Rate:** 100.00%
-- **Successful:** 3
-- **Failed:** 0
-
-## Post-Test Verification Results
-| VM | NIC Name | Actual IP | Expected IP | Allocation | Status |
-|----|----------|-----------|-------------|------------|--------|
-| testvm1 | testvm1-nic-new | 10.0.0.9 | 10.0.0.9 | Static | ✅ PASS |
-| testvm2 | testvm2-nic-new | 10.0.0.10 | 10.0.0.10 | Static | ✅ PASS |
-| testvm3 | testvm3-nic-new | 10.0.0.11 | 10.0.0.11 | Static | ✅ PASS |
-
-[... detailed VM results, configuration, and conclusion ...]
-```
 
 ## Best Practices
 

@@ -3,9 +3,6 @@
 *.txt
 !sample-vms.csv
 
-# Test results
-test-results-summary-*.md
-
 # Azure CLI cache
 .azure/
 
