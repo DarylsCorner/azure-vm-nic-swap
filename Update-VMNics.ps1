@@ -187,9 +187,6 @@ foreach ($column in @('VMName', 'ResourceGroup', 'VNetResourceGroup', 'VNetName'
     }
 }
 
-# Capture script start time for duration calculation
-$scriptStartTime = Get-Date
-
 # Process each VM
 $successCount = 0
 $failureCount = 0
