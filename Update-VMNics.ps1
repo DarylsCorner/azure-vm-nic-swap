@@ -468,43 +468,34 @@ Write-Log "Successful: $successCount" -Level SUCCESS
 Write-Log "Failed: $failureCount" -Level $(if ($failureCount -gt 0) { 'WARNING' } else { 'INFO' })
 Write-Log "Log file: $LogPath" -Level INFO
 
-# Post-test verification if any VMs were successful
+# Post-execution summary if any VMs were successful
 if ($successCount -gt 0) {
-    Write-Host "`n=== Post-Test Verification ===`n" -ForegroundColor Cyan
+    Write-Host "`n=== Final VM Status ===`n" -ForegroundColor Cyan
     
     foreach ($vm in $vms) {
         $vmName = $vm.VMName
         $resourceGroup = $vm.ResourceGroup
-        $expectedIP = $vm.NewNicIPAddress
         
         try {
-            # Determine the new NIC name (same logic as during processing)
-            $vmInfo = az vm show --name $vmName --resource-group $resourceGroup --query "{nics:networkProfile.networkInterfaces}" -o json 2>$null | ConvertFrom-Json
-            if ($vmInfo.nics -and $vmInfo.nics.Count -gt 0) {
-                $originalNicId = $vmInfo.nics[0].id
-                $originalNicName = $originalNicId.Split('/')[-1]
-                $newNicName = if ($originalNicName -eq "$vmName-nic-new") { "$vmName-nic-replacement" } else { "$vmName-nic-new" }
+            # Get current VM NIC information
+            $vmInfo = az vm show --name $vmName --resource-group $resourceGroup --query "networkProfile.networkInterfaces[0].id" -o tsv 2>$null
+            if ($vmInfo) {
+                $currentNicName = ($vmInfo -split '/')[-1]
                 
-                Write-Host "VM: $vmName (Expected IP: $expectedIP)" -ForegroundColor Yellow
-                
-                # Get NIC details
-                $nicInfo = az network nic show --name $newNicName --resource-group $resourceGroup --query "{Name:name, IP:ipConfigurations[0].privateIPAddress, Allocation:ipConfigurations[0].privateIPAllocationMethod}" -o json 2>$null | ConvertFrom-Json
+                # Get NIC details including accelerated networking
+                $nicInfo = az network nic show --name $currentNicName --resource-group $resourceGroup --query "{IP:ipConfigurations[0].privateIPAddress, AcceleratedNetworking:enableAcceleratedNetworking}" -o json 2>$null | ConvertFrom-Json
                 
                 if ($nicInfo) {
-                    if ($nicInfo.IP -eq $expectedIP -and $nicInfo.Allocation -eq "Static") {
-                        Write-Host "  ✅ PASS - NIC: $($nicInfo.Name) | IP: $($nicInfo.IP) | Allocation: $($nicInfo.Allocation)" -ForegroundColor Green
-                    } else {
-                        Write-Host "  ❌ FAIL - NIC: $($nicInfo.Name) | IP: $($nicInfo.IP) | Allocation: $($nicInfo.Allocation)" -ForegroundColor Red
-                    }
-                    Write-Host ""
+                    $acceleratedStatus = if ($nicInfo.AcceleratedNetworking -eq $true) { "✅ Enabled" } else { "❌ Disabled" }
+                    Write-Host "VM: $vmName | IP: $($nicInfo.IP) | Accelerated Networking: $acceleratedStatus" -ForegroundColor Green
                 }
             }
         }
         catch {
-            Write-Host "  ⚠️  Could not verify VM: $vmName" -ForegroundColor Yellow
-            Write-Host ""
+            Write-Host "VM: $vmName | Status: ⚠️ Could not retrieve information" -ForegroundColor Yellow
         }
     }
+    Write-Host ""
 }
 
 if ($failureCount -gt 0) {

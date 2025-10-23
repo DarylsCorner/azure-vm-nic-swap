@@ -36,6 +36,7 @@ This script automates the process of replacing Azure VM NICs while preserving se
 ### Post-Execution Features
 - ✅ **Detailed Logging** - Color-coded console output and file logs
 - ✅ **Duration Tracking** - Timestamps and total execution time
+- ✅ **Final VM Status Summary** - Clear display of final VM configuration with IP addresses and accelerated networking status
 
 ## Prerequisites
 
@@ -312,7 +313,23 @@ After execution, the script generates:
 [2025-10-21 17:08:15] [INFO] Total VMs processed: 4
 [2025-10-21 17:08:15] [SUCCESS] Successful: 4
 [2025-10-21 17:08:15] [INFO] Failed: 0
+
+=== Final VM Status ===
+
+VM: testvm1 | IP: 10.0.0.7 | Accelerated Networking: ✅ Enabled
+VM: testvm2 | IP: 10.0.0.8 | Accelerated Networking: ✅ Enabled
+VM: testvm3 | IP: 10.0.0.9 | Accelerated Networking: ✅ Enabled
+VM: testvm4 | IP: 10.0.0.10 | Accelerated Networking: ✅ Enabled
 ```
+
+### Final VM Status Summary
+
+After successful completion, the script displays a clean summary showing:
+- **VM Name**: The name of each processed VM
+- **Current IP**: The current primary IP address assigned to the VM
+- **Accelerated Networking Status**: Whether accelerated networking is enabled (✅) or disabled (❌)
+
+This summary provides an at-a-glance view of the final configuration state without requiring manual verification commands.
 
 
 

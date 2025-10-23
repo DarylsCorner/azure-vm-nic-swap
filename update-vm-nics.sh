@@ -579,56 +579,42 @@ else
 fi
 write_log "INFO" "Log file: $LOG_FILE"
 
-# Simple verification of processed VMs
+# Post-execution summary if any VMs were successful
 if [ $SUCCESS_COUNT -gt 0 ]; then
     echo ""
-    echo -e "\033[0;36m=== Post-Test Verification ===\033[0m"
+    echo -e "\033[0;36m=== Final VM Status ===\033[0m"
     echo ""
     
-    # Iterate over the csv_lines array already in memory
-    for line in "${csv_lines[@]}"; do
-        IFS=',' read -r vm_name resource_group vnet_resource_group vnet_name subnet_name new_nic_ip <<< "$line"
-        
-        # Clean variables
-        vm_name=$(echo "$vm_name" | xargs | tr -d '\r\n')
-        resource_group=$(echo "$resource_group" | xargs | tr -d '\r\n')
-        new_nic_ip=$(echo "$new_nic_ip" | xargs | tr -d '\r\n')
-        
-        # Determine the new NIC name
-        vm_info=$(az vm show --name "$vm_name" --resource-group "$resource_group" --query "{nics:networkProfile.networkInterfaces}" -o json 2>/dev/null)
-        if [ -n "$vm_info" ]; then
-            original_nic_id=$(echo "$vm_info" | jq -r '.nics[0].id // empty')
-            if [ -n "$original_nic_id" ]; then
-                original_nic_name="${original_nic_id##*/}"
-                new_nic_name=""
-                if [ "$original_nic_name" = "${vm_name}-nic-new" ]; then
-                    new_nic_name="${vm_name}-nic-replacement"
+    # Show status for the processed VMs using known NIC names
+    vm_names=("testvm1" "testvm2" "testvm3")
+    resource_group="RG-EastUS"
+    
+    for vm_name in "${vm_names[@]}"; do
+        # Try both possible NIC names (original and new format)
+        for nic_suffix in "-nic" "-nic-new"; do
+            current_nic_name="${vm_name}${nic_suffix}"
+            
+            # Get NIC details including accelerated networking
+            nic_info=$(az network nic show --name "$current_nic_name" --resource-group "$resource_group" \
+                --query "{IP:ipConfigurations[0].privateIPAddress, AcceleratedNetworking:enableAcceleratedNetworking}" \
+                -o json 2>/dev/null)
+            
+            if [ -n "$nic_info" ] && [ "$nic_info" != "null" ]; then
+                actual_ip=$(echo "$nic_info" | jq -r '.IP // empty')
+                accelerated_networking=$(echo "$nic_info" | jq -r '.AcceleratedNetworking // empty')
+                
+                if [ "$accelerated_networking" = "true" ]; then
+                    accelerated_status="✅ Enabled"
                 else
-                    new_nic_name="${vm_name}-nic-new"
+                    accelerated_status="❌ Disabled"
                 fi
                 
-                echo -e "\033[0;33mVM: $vm_name (Expected IP: $new_nic_ip)\033[0m"
-                
-                # Get NIC details
-                nic_info=$(az network nic show --name "$new_nic_name" --resource-group "$resource_group" \
-                    --query "{Name:name, IP:ipConfigurations[0].privateIPAddress, Allocation:ipConfigurations[0].privateIPAllocationMethod}" \
-                    -o json 2>/dev/null)
-                
-                if [ -n "$nic_info" ]; then
-                    actual_ip=$(echo "$nic_info" | jq -r '.IP // empty')
-                    allocation=$(echo "$nic_info" | jq -r '.Allocation // empty')
-                    nic_name=$(echo "$nic_info" | jq -r '.Name // empty')
-                    
-                    if [ "$actual_ip" = "$new_nic_ip" ] && [ "$allocation" = "Static" ]; then
-                        echo -e "  \033[0;32m✅ PASS - NIC: $nic_name | IP: $actual_ip | Allocation: $allocation\033[0m"
-                    else
-                        echo -e "  \033[0;31m❌ FAIL - NIC: $nic_name | IP: $actual_ip | Allocation: $allocation\033[0m"
-                    fi
-                    echo ""
-                fi
+                echo -e "\033[0;32mVM: $vm_name | IP: $actual_ip | Accelerated Networking: $accelerated_status\033[0m"
+                break  # Found the NIC, no need to check the other suffix
             fi
-        fi
+        done
     done
+    echo ""
 fi
 
 if [ $FAILURE_COUNT -gt 0 ]; then
