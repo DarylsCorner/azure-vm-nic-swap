@@ -19,6 +19,7 @@ This script automates the process of replacing Azure VM NICs while preserving se
 - ✅ **IP Preservation** - Preserves secondary IPs from original NICs
 - ✅ **Static IP Allocation** - Automatic Static allocation when IP specified
 - ✅ **NSG Preservation** - Maintains Network Security Groups
+- ✅ **Accelerated Networking** - Preserves accelerated networking configuration
 - ✅ **Safe Deallocation** - Safely shuts down VMs before NIC changes
 - ✅ **Auto Power-On** - Starts VMs after successful changes
 
@@ -150,6 +151,7 @@ For each VM in the CSV file, the script performs these steps:
    - Creates new NIC in the same location with temporary IP
    - Uses the same subnet as original NIC
    - Preserves Network Security Group (NSG) if present
+   - Preserves accelerated networking configuration
    - Detects naming conflicts and uses alternate names if needed
 
 4. **Swap NICs**
@@ -290,9 +292,11 @@ VM: testvm3 | NIC: testvm3-nic-new | IP: 10.0.0.11 (Expected: 10.0.0.11) | Alloc
 [2025-10-21 16:59:32] [SUCCESS] Successfully imported 3 VMs from CSV
 [2025-10-21 16:59:32] [INFO] Processing VM: testvm1
 [2025-10-21 16:59:35] [INFO] Original NIC: testvm1-nic
+[2025-10-21 16:59:35] [INFO] Accelerated Networking: true
 [2025-10-21 16:56:35] [INFO] Querying subnet for available temporary IP...
 [2025-10-21 16:56:35] [INFO] Using available IP from subnet: 10.0.0.4
 [2025-10-21 16:56:35] [INFO] Creating new NIC: testvm1-nic-new with temporary IP: 10.0.0.4
+[2025-10-21 16:56:35] [INFO] Enabling accelerated networking on new NIC
 [2025-10-21 17:02:03] [INFO] Waiting 15 seconds after deleting NIC to ensure IPs are fully released...
 [2025-10-21 17:02:18] [INFO] Updating new NIC IP from temporary (10.0.0.4) to final (10.0.0.9)...
 [2025-10-21 17:02:45] [SUCCESS] Successfully completed NIC update for VM: testvm1

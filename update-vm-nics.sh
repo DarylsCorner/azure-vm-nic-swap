@@ -187,7 +187,7 @@ process_vm() {
     write_log "INFO" "Getting original NIC details..."
     local original_nic_info
     if ! original_nic_info=$(az network nic show --ids "$original_nic_id" \
-        --query "{subnetId:ipConfigurations[0].subnet.id, nsgId:networkSecurityGroup.id}" -o json 2>&1); then
+        --query "{subnetId:ipConfigurations[0].subnet.id, nsgId:networkSecurityGroup.id, acceleratedNetworking:enableAcceleratedNetworking}" -o json 2>&1); then
         write_log "ERROR" "Failed to get original NIC information"
         write_log "ERROR" "$original_nic_info"
         return 1
@@ -195,8 +195,10 @@ process_vm() {
     
     local original_subnet_id=$(echo "$original_nic_info" | jq -r '.subnetId')
     local nsg_id=$(echo "$original_nic_info" | jq -r '.nsgId // empty')
+    local accelerated_networking=$(echo "$original_nic_info" | jq -r '.acceleratedNetworking')
     
     write_log "INFO" "Original NIC Subnet: $(basename "$original_subnet_id")"
+    write_log "INFO" "Accelerated Networking: $accelerated_networking"
     write_log "INFO" "New NIC IP: $new_nic_ip"
     if [ -n "$nsg_id" ]; then
         local nsg_name=$(basename "$nsg_id")
@@ -264,6 +266,12 @@ process_vm() {
     # Add NSG if original NIC had one
     if [ -n "$nsg_id" ]; then
         create_nic_cmd="$create_nic_cmd --network-security-group \"$nsg_id\""
+    fi
+    
+    # Add accelerated networking if original NIC had it enabled
+    if [ "$accelerated_networking" = "true" ]; then
+        create_nic_cmd="$create_nic_cmd --accelerated-networking true"
+        write_log "INFO" "Enabling accelerated networking on new NIC"
     fi
     
     if ! invoke_az_command "$create_nic_cmd" "Create new NIC" > /dev/null; then

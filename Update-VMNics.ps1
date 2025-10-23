@@ -222,10 +222,11 @@ foreach ($vm in $vms) {
         
         Write-Log "VM Location: $location" -Level INFO
         Write-Log "Original NIC: $originalNicName" -Level INFO
+        Write-Log "Accelerated Networking: $acceleratedNetworking" -Level INFO
         
         # Get original NIC details
         Write-Log "Getting original NIC details..." -Level INFO
-        $originalNicInfo = az network nic show --ids $originalNicId --query "{subnetId:ipConfigurations[0].subnet.id, nsgId:networkSecurityGroup.id}" -o json 2>$null | ConvertFrom-Json
+        $originalNicInfo = az network nic show --ids $originalNicId --query "{subnetId:ipConfigurations[0].subnet.id, nsgId:networkSecurityGroup.id, acceleratedNetworking:enableAcceleratedNetworking}" -o json 2>$null | ConvertFrom-Json
         
         if ($null -eq $originalNicInfo) {
             Write-Log "Failed to get original NIC information" -Level ERROR
@@ -235,6 +236,7 @@ foreach ($vm in $vms) {
         
         $originalSubnetId = $originalNicInfo.subnetId
         $nsgId = $originalNicInfo.nsgId
+        $acceleratedNetworking = $originalNicInfo.acceleratedNetworking
         
         Write-Log "Original NIC Subnet: $(($originalSubnetId -split '/')[-1])" -Level INFO
         Write-Log "New NIC IP: $newNicIP" -Level INFO
@@ -301,6 +303,12 @@ foreach ($vm in $vms) {
         # Add NSG if original NIC had one
         if ($nsgId) {
             $createNicCmd += " --network-security-group `"$nsgId`""
+        }
+        
+        # Add accelerated networking if original NIC had it enabled
+        if ($acceleratedNetworking -eq $true) {
+            $createNicCmd += " --accelerated-networking true"
+            Write-Log "Enabling accelerated networking on new NIC" -Level INFO
         }
         
         $result = Invoke-AzCommand $createNicCmd "Create new NIC"
