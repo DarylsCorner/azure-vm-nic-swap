@@ -242,8 +242,83 @@ foreach ($vm in $vms) {
         Write-Log "New NIC IP: $newNicIP" -Level INFO
         Write-Log "NSG: $(if ($nsgId) { ($nsgId -split '/')[-1] } else { 'None' })" -Level INFO
         
-        # Step 2: Deallocate VM
-        Write-Log "Deallocating VM..." -Level INFO
+        # Step 2: Check if NIC replacement is needed or just accelerated networking update
+        $newNicName = "$vmName-nic-new"
+        
+        # Check if the current NIC is already named *-nic-new (from previous run)
+        # If so, just update accelerated networking instead of full replacement
+        if ($originalNicName -eq $newNicName) {
+            Write-Log "VM already has new NIC format ($newNicName), checking accelerated networking..." -Level INFO
+            
+            # Check if accelerated networking is already enabled
+            if ($acceleratedNetworking -eq $true) {
+                Write-Log "Accelerated networking is already enabled on $originalNicName" -Level SUCCESS
+                $successCount++
+                continue
+            } else {
+                Write-Log "Enabling accelerated networking on existing NIC: $originalNicName" -Level INFO
+                
+                # Try to enable accelerated networking without deallocation first (portal-style)
+                Write-Log "Attempting to enable accelerated networking on running VM..." -Level INFO
+                $result = az network nic update --ids "$originalNicId" --accelerated-networking true 2>&1
+                
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Log "Successfully enabled accelerated networking without VM deallocation" -Level SUCCESS
+                } else {
+                    Write-Log "Failed to enable on running VM, trying with VM deallocation..." -Level WARNING
+                    
+                    # Deallocate VM for accelerated networking change
+                    Write-Log "Deallocating VM for accelerated networking change..." -Level INFO
+                    $result = Invoke-AzCommand "vm deallocate --name $vmName --resource-group $resourceGroup --no-wait" "Deallocate VM"
+                    
+                    if ($null -eq $result) {
+                        Write-Log "Failed to deallocate VM" -Level ERROR
+                        $failureCount++
+                        continue
+                    }
+                    
+                    # Wait for VM to be deallocated
+                    if (-not (Wait-VMState -VMName $vmName -ResourceGroup $resourceGroup -TargetState "deallocated" -MaxWaitMinutes 10)) {
+                        Write-Log "VM did not deallocate in expected time" -Level WARNING
+                    }
+                    
+                    # Enable accelerated networking on existing NIC (deallocate first)
+                    $result = Invoke-AzCommand "network nic update --ids `"$originalNicId`" --accelerated-networking true" "Enable accelerated networking"
+                    
+                    if ($null -eq $result) {
+                        Write-Log "Failed to enable accelerated networking even with deallocation" -Level ERROR
+                        Write-Log "Attempting to restart VM..." -Level WARNING
+                        az vm start --name $vmName --resource-group $resourceGroup --no-wait 2>$null
+                        $failureCount++
+                        continue
+                    }
+                }
+                
+                Write-Log "Successfully enabled accelerated networking on $originalNicName" -Level SUCCESS
+                
+                # Step 4: Start VM
+                Write-Log "Starting VM..." -Level INFO
+                $result = Invoke-AzCommand "vm start --name $vmName --resource-group $resourceGroup --no-wait" "Start VM"
+                
+                if ($null -eq $result) {
+                    Write-Log "Failed to start VM" -Level ERROR
+                    $failureCount++
+                    continue
+                }
+                
+                # Wait for VM to be running
+                if (-not (Wait-VMState -VMName $vmName -ResourceGroup $resourceGroup -TargetState "running" -MaxWaitMinutes 10)) {
+                    Write-Log "VM did not start in expected time" -Level WARNING
+                }
+                
+                Write-Log "Successfully updated accelerated networking for VM: $vmName" -Level SUCCESS
+                $successCount++
+                continue
+            }
+        }
+        
+        # Step 3: Deallocate VM for full NIC replacement
+        Write-Log "Deallocating VM for NIC replacement..." -Level INFO
         $result = Invoke-AzCommand "vm deallocate --name $vmName --resource-group $resourceGroup --no-wait" "Deallocate VM"
         
         if ($null -eq $result) {
@@ -257,17 +332,7 @@ foreach ($vm in $vms) {
             Write-Log "VM did not deallocate in expected time" -Level WARNING
         }
         
-        # Step 3: Create new NIC with temporary IP
-        $newNicName = "$vmName-nic-new"
-        
-        # Check if the current NIC is already named *-nic-new (from previous run)
-        # If so, use a different name for the new NIC to avoid conflict
-        if ($originalNicName -eq $newNicName) {
-            Write-Log "Original NIC is already named '$newNicName', using alternate name" -Level WARNING
-            $newNicName = "$vmName-nic-replacement"
-        }
-        
-        # Check if new NIC name already exists (from previous failed run) and delete it if not attached
+        # Step 4: Check if new NIC name already exists (from previous failed run) and delete it if not attached
         $existingNewNic = az network nic show --name $newNicName --resource-group $resourceGroup --query "{id:id, vmId:virtualMachine.id}" -o json 2>$null | ConvertFrom-Json
         if ($existingNewNic) {
             if ($existingNewNic.vmId) {

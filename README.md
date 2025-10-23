@@ -24,6 +24,8 @@ This script automates the process of replacing Azure VM NICs while preserving se
 - ✅ **Auto Power-On** - Starts VMs after successful changes
 
 ### Advanced Features
+- ✅ **Smart Detection** - Automatically detects already-processed VMs and skips unnecessary operations
+- ✅ **Accelerated Networking Enhancement** - Enables accelerated networking without VM deallocation when possible
 - ✅ **Idempotency** - Safe to re-run multiple times without side effects
 - ✅ **Naming Conflict Detection** - Handles existing NICs intelligently with alternate naming
 - ✅ **Azure IP Query** - Queries subnet for available temporary IPs
@@ -32,9 +34,6 @@ This script automates the process of replacing Azure VM NICs while preserving se
 - ✅ **Temporary IP Strategy** - Uses temporary IP during swap, then updates to final IP
 
 ### Post-Execution Features
-- ✅ **Post-Execution Verification** - Verifies each VM's new NIC configuration
-- ✅ **IP Validation** - Confirms actual IP vs expected IP
-- ✅ **Allocation Verification** - Confirms Static IP allocation
 - ✅ **Detailed Logging** - Color-coded console output and file logs
 - ✅ **Duration Tracking** - Timestamps and total execution time
 
@@ -178,12 +177,21 @@ For each VM in the CSV file, the script performs these steps:
 - **15-Second Wait**: After deleting old NIC, script waits 15 seconds for IP release (optimized from 2 minutes)
 - **Static Allocation**: When `--private-ip-address` is specified, Azure CLI automatically assigns Static allocation
 
-### Naming Strategy
+### Naming Strategy & Smart Detection
 - **Default Naming**: New NIC named `{vmname}-nic-new`
-- **Conflict Detection**: If `{vmname}-nic-new` already exists, uses `{vmname}-nic-replacement`
-- **Idempotency**: Script handles existing NICs from previous runs
-  - Detached NICs are deleted automatically
-  - Attached NICs cause an error (manual intervention required)
+- **Smart Detection**: If VM already has `{vmname}-nic-new`, script intelligently:
+  - ✅ **Skips full replacement** - No unnecessary NIC swap operations
+  - ✅ **Updates accelerated networking only** - Enables if missing from existing NIC
+  - ✅ **No-op if already configured** - Exits successfully if accelerated networking already enabled
+  - ✅ **Avoids unnecessary deallocations** - Only deallocates VMs when absolutely required
+- **Accelerated Networking Enhancement**: 
+  - ✅ **Portal-style enablement** - Attempts to enable accelerated networking on running VMs first
+  - ✅ **Fallback deallocation** - Only deallocates if the running approach fails
+  - ✅ **Zero downtime when possible** - Minimizes VM disruption
+- **Idempotency**: Script is completely safe to re-run multiple times
+  - Previous replacements detected and handled intelligently
+  - Only missing configurations are applied
+  - Detached NICs from failed runs are cleaned up automatically
 
 ### Secondary IP Preservation
 - **CSV IP Address**: The `NewNicIPAddress` should be the **secondary IP** from the original NIC
@@ -241,23 +249,19 @@ After execution, the script generates:
 - `WARNING`: Non-critical issues
 - `ERROR`: Critical failures
 
-**Example Verification Output:**
-```
-========================================
-Post-Execution Verification
-========================================
-VM: testvm1 | NIC: testvm1-nic-new | IP: 10.0.0.9 (Expected: 10.0.0.9) | Allocation: Static | Status: ✅ PASS
-VM: testvm2 | NIC: testvm2-nic-new | IP: 10.0.0.10 (Expected: 10.0.0.10) | Allocation: Static | Status: ✅ PASS
-VM: testvm3 | NIC: testvm3-nic-new | IP: 10.0.0.11 (Expected: 10.0.0.11) | Allocation: Static | Status: ✅ PASS
-```
+
 
 ## Safety Features
 
 1. **Validation Before Execution**: Checks CSV format and Azure authentication
-2. **Rollback Capability**: Attempts to restore original state on failure
-3. **State Monitoring**: Waits for operations to complete before proceeding
-4. **Detailed Logging**: Complete audit trail of all operations
-5. **Error Recovery**: Attempts to restart VMs if operations fail
+2. **Smart Idempotency**: Detects already-processed VMs and applies only needed updates
+3. **Intelligent Deallocation**: Only deallocates VMs when absolutely necessary
+4. **Accelerated Networking Only Mode**: Updates existing NICs without full replacement when appropriate
+5. **Portal-style Updates**: Attempts accelerated networking changes on running VMs first
+6. **Rollback Capability**: Attempts to restore original state on failure
+7. **State Monitoring**: Waits for operations to complete before proceeding
+8. **Detailed Logging**: Complete audit trail of all operations
+9. **Error Recovery**: Attempts to restart VMs if operations fail
 
 ## Performance
 
@@ -300,16 +304,14 @@ VM: testvm3 | NIC: testvm3-nic-new | IP: 10.0.0.11 (Expected: 10.0.0.11) | Alloc
 [2025-10-21 17:02:03] [INFO] Waiting 15 seconds after deleting NIC to ensure IPs are fully released...
 [2025-10-21 17:02:18] [INFO] Updating new NIC IP from temporary (10.0.0.4) to final (10.0.0.9)...
 [2025-10-21 17:02:45] [SUCCESS] Successfully completed NIC update for VM: testvm1
-[2025-10-21 17:08:15] [INFO] Total VMs processed: 3
-[2025-10-21 17:08:15] [SUCCESS] Successful: 3
+[2025-10-21 17:08:15] [INFO] Processing VM: testvm4
+[2025-10-21 17:08:16] [INFO] VM already has new NIC format (testvm4-nic-new), checking accelerated networking...
+[2025-10-21 17:08:17] [INFO] Enabling accelerated networking on existing NIC: testvm4-nic-new
+[2025-10-21 17:08:45] [SUCCESS] Successfully enabled accelerated networking on testvm4-nic-new
+[2025-10-21 17:08:50] [SUCCESS] Successfully updated accelerated networking for VM: testvm4
+[2025-10-21 17:08:15] [INFO] Total VMs processed: 4
+[2025-10-21 17:08:15] [SUCCESS] Successful: 4
 [2025-10-21 17:08:15] [INFO] Failed: 0
-
-========================================
-Post-Execution Verification
-========================================
-VM: testvm1 | NIC: testvm1-nic-new | IP: 10.0.0.9 (Expected: 10.0.0.9) | Allocation: Static | Status: ✅ PASS
-VM: testvm2 | NIC: testvm2-nic-new | IP: 10.0.0.10 (Expected: 10.0.0.10) | Allocation: Static | Status: ✅ PASS
-VM: testvm3 | NIC: testvm3-nic-new | IP: 10.0.0.11 (Expected: 10.0.0.11) | Allocation: Static | Status: ✅ PASS
 ```
 
 

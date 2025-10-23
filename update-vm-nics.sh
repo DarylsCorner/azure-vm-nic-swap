@@ -207,8 +207,71 @@ process_vm() {
         write_log "INFO" "NSG: None"
     fi
     
-    # Step 2: Deallocate VM
-    write_log "INFO" "Deallocating VM..."
+    # Step 2: Check if NIC replacement is needed or just accelerated networking update
+    local new_nic_name="${vm_name}-nic-new"
+    
+    # Check if the current NIC is already named *-nic-new (from previous run)
+    # If so, just update accelerated networking instead of full replacement
+    if [ "$original_nic_name" = "$new_nic_name" ]; then
+        write_log "INFO" "VM already has new NIC format ($new_nic_name), checking accelerated networking..."
+        
+        # Check if accelerated networking is already enabled
+        if [ "$accelerated_networking" = "true" ]; then
+            write_log "SUCCESS" "Accelerated networking is already enabled on $original_nic_name"
+            return 0
+        else
+            write_log "INFO" "Enabling accelerated networking on existing NIC: $original_nic_name"
+            
+            # Try to enable accelerated networking without deallocation first (portal-style)
+            write_log "INFO" "Attempting to enable accelerated networking on running VM..."
+            if az network nic update --ids "$original_nic_id" --accelerated-networking true > /dev/null 2>&1; then
+                write_log "SUCCESS" "Successfully enabled accelerated networking without VM deallocation"
+            else
+                write_log "WARNING" "Failed to enable on running VM, trying with VM deallocation..."
+                
+                # Deallocate VM for accelerated networking change
+                write_log "INFO" "Deallocating VM for accelerated networking change..."
+                if ! invoke_az_command "vm deallocate --name \"$vm_name\" --resource-group \"$resource_group\" --no-wait" \
+                    "Deallocate VM" > /dev/null; then
+                    write_log "ERROR" "Failed to deallocate VM"
+                    return 1
+                fi
+                
+                # Wait for VM to be deallocated
+                if ! wait_vm_state "$vm_name" "$resource_group" "deallocated" 10; then
+                    write_log "WARNING" "VM did not deallocate in expected time"
+                fi
+                
+                # Enable accelerated networking on existing NIC (deallocate first)
+                if ! invoke_az_command "network nic update --ids \"$original_nic_id\" --accelerated-networking true" "Enable accelerated networking" > /dev/null; then
+                    write_log "ERROR" "Failed to enable accelerated networking even with deallocation"
+                    write_log "WARNING" "Attempting to restart VM..."
+                    az vm start --name "$vm_name" --resource-group "$resource_group" --no-wait 2>/dev/null
+                    return 1
+                fi
+            fi
+            
+            write_log "SUCCESS" "Successfully enabled accelerated networking on $original_nic_name"
+            
+            # Step 4: Start VM
+            write_log "INFO" "Starting VM..."
+            if ! invoke_az_command "vm start --name \"$vm_name\" --resource-group \"$resource_group\" --no-wait" "Start VM" > /dev/null; then
+                write_log "ERROR" "Failed to start VM"
+                return 1
+            fi
+            
+            # Wait for VM to be running
+            if ! wait_vm_state "$vm_name" "$resource_group" "running" 10; then
+                write_log "WARNING" "VM did not start in expected time"
+            fi
+            
+            write_log "SUCCESS" "Successfully updated accelerated networking for VM: $vm_name"
+            return 0
+        fi
+    fi
+    
+    # Step 3: Deallocate VM for full NIC replacement
+    write_log "INFO" "Deallocating VM for NIC replacement..."
     if ! invoke_az_command "vm deallocate --name \"$vm_name\" --resource-group \"$resource_group\" --no-wait" \
         "Deallocate VM" > /dev/null; then
         write_log "ERROR" "Failed to deallocate VM"
@@ -220,17 +283,7 @@ process_vm() {
         write_log "WARNING" "VM did not deallocate in expected time"
     fi
     
-    # Step 3: Create new NIC with temporary IP
-    local new_nic_name="${vm_name}-nic-new"
-    
-    # Check if the current NIC is already named *-nic-new (from previous run)
-    # If so, use a different name for the new NIC to avoid conflict
-    if [ "$original_nic_name" = "$new_nic_name" ]; then
-        write_log "WARNING" "Original NIC is already named '$new_nic_name', using alternate name"
-        new_nic_name="${vm_name}-nic-replacement"
-    fi
-    
-    # Check if new NIC name already exists (from previous failed run) and delete it if not attached
+    # Step 4: Check if new NIC name already exists (from previous failed run) and delete it if not attached
     if az network nic show --name "$new_nic_name" --resource-group "$resource_group" >/dev/null 2>&1; then
         local vm_id
         vm_id=$(az network nic show --name "$new_nic_name" --resource-group "$resource_group" --query "virtualMachine.id" -o tsv 2>/dev/null)
