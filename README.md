@@ -29,7 +29,7 @@ This script automates the process of replacing Azure VM NICs while preserving se
 - ✅ **Idempotency** - Safe to re-run multiple times without side effects
 - ✅ **Naming Conflict Detection** - Handles existing NICs intelligently with alternate naming
 - ✅ **Azure IP Query** - Queries subnet for available temporary IPs
-- ✅ **Optimized Performance** - 15-second wait time (40% faster than 2-minute wait)
+- ✅ **Optimized Performance** - 15-second wait time
 - ✅ **Comprehensive Error Handling** - Automatic rollback on failure
 - ✅ **Temporary IP Strategy** - Uses temporary IP during swap, then updates to final IP
 
@@ -84,6 +84,105 @@ Create a CSV file with the following columns:
 ### Sample CSV
 
 See `sample-vms.csv` for an example.
+
+## Automated CSV Generation
+
+Instead of manually creating the CSV file, you can use the included `generate_csv.sh` script to automatically discover VMs and generate the CSV file with all required information.
+
+### Prerequisites for CSV Generation
+
+- **Bash shell** (Linux/macOS/WSL/Git Bash on Windows)
+- **Azure CLI** installed and authenticated (`az login`)
+- **jq** installed (JSON processor)
+- VMs must have **secondary IP addresses** already configured
+
+### CSV Generation Usage
+
+#### Make Script Executable (First Time Only)
+
+```bash
+chmod +x generate_csv.sh
+```
+
+#### Basic Usage - All VMs in Resource Group
+
+```bash
+./generate_csv.sh RG-EastUS
+```
+
+This creates: `RG-EastUS-vms.csv`
+
+#### Custom Output Filename
+
+```bash
+./generate_csv.sh RG-EastUS my-custom-vms.csv
+```
+
+This creates: `my-custom-vms.csv`
+
+#### Filter VMs by Name Pattern
+
+```bash
+./generate_csv.sh RG-EastUS RG-EastUS-vms.csv prod
+```
+
+This creates: `RG-EastUS-vms.csv` containing only VMs with "prod" in their name
+
+### CSV Generation Features
+
+✅ **Automatic Discovery** - Queries Azure to find all VMs in the resource group
+✅ **Secondary IP Validation** - Verifies each VM has a secondary IP (required for NIC swap)
+✅ **Network Details Extraction** - Automatically retrieves VNet, subnet, and IP information
+✅ **Error Prevention** - Fails with clear error if any VM is missing a secondary IP
+✅ **Resource Group Naming** - Default output file named after the resource group
+✅ **VM Filtering** - Optional name pattern matching for selective VM processing
+
+### CSV Generation Output Example
+
+```bash
+$ ./generate_csv.sh RG-EastUS
+Querying VMs in resource group: RG-EastUS
+Processing all VMs in the resource group...
+Processing VM: testvm1
+  ✅ Primary IP: 10.0.0.7, Secondary IP: 10.0.0.9
+Processing VM: testvm2
+  ✅ Primary IP: 10.0.0.8, Secondary IP: 10.0.0.10
+Processing VM: testvm3
+  ✅ Primary IP: 10.0.0.6, Secondary IP: 10.0.0.11
+
+✅ Successfully processed 3 VM(s) - All VMs have secondary IPs
+CSV file generated: RG-EastUS-vms.csv
+
+You can now use this CSV file with the NIC swap scripts:
+  PowerShell: .\Update-VMNics.ps1 -CsvPath RG-EastUS-vms.csv
+  Bash:       bash ./update-vm-nics.sh RG-EastUS-vms.csv
+```
+
+### Important Notes
+
+**Secondary IP Requirement**: The script will **fail** if any VM does not have a secondary IP address. This is by design, as secondary IPs are required for the NIC swap process.
+
+**To add a secondary IP** to a VM's NIC:
+```bash
+az network nic ip-config create \
+  --resource-group <resource-group> \
+  --nic-name <nic-name> \
+  --name ipconfig2 \
+  --private-ip-address <new-ip-address>
+```
+
+**Example**:
+```bash
+az network nic ip-config create \
+  --resource-group RG-EastUS \
+  --nic-name testvm1-nic \
+  --name ipconfig2 \
+  --private-ip-address 10.0.0.9
+```
+
+### Manual CSV Creation
+
+If you prefer to create the CSV manually or need to customize it, you can create a CSV file with the format shown in the "CSV File Format" section above.
 
 ## Usage
 
@@ -152,7 +251,6 @@ For each VM in the CSV file, the script performs these steps:
    - Uses the same subnet as original NIC
    - Preserves Network Security Group (NSG) if present
    - Preserves accelerated networking configuration
-   - Detects naming conflicts and uses alternate names if needed
 
 4. **Swap NICs**
    - Attaches new NIC to VM (VM now has 2 NICs)
@@ -175,7 +273,7 @@ For each VM in the CSV file, the script performs these steps:
 ### IP Address Handling
 - **Temporary IP Strategy**: The script creates the new NIC with a temporary IP, then updates to the final IP after the old NIC is deleted
 - **Azure IP Query**: Script automatically queries Azure for available IPs in the subnet
-- **15-Second Wait**: After deleting old NIC, script waits 15 seconds for IP release (optimized from 2 minutes)
+- **15-Second Wait**: After deleting old NIC, script waits 15 seconds for IP release 
 - **Static Allocation**: When `--private-ip-address` is specified, Azure CLI automatically assigns Static allocation
 
 ### Naming Strategy & Smart Detection
@@ -221,6 +319,15 @@ The script includes comprehensive error handling:
 - **Solution**: Verify the new NIC IP is available in the subnet or wait for the old NIC to be detached
 - **Command**: `az network nic list --resource-group <rg> --query "[].ipConfigurations[].privateIPAddress"`
 
+**Issue**: Failed to retrieve available IP from subnet
+- **Solution**: Check if subnet has available IPs or expand the subnet address space
+- **Causes**: 
+  - Subnet is full (all IPs allocated)
+  - Insufficient permissions to query subnet
+  - Azure API issue
+- **Command**: `az network vnet subnet show --ids <subnet-id> --query "addressPrefix"`
+- **Check available IPs**: `az network vnet subnet list-available-ips --ids <subnet-id>`
+
 **Issue**: Insufficient permissions
 - **Solution**: Verify you have the required RBAC roles
 - **Command**: `az role assignment list --assignee <your-email>`
@@ -239,16 +346,28 @@ The script includes comprehensive error handling:
 
 After execution, the script generates:
 
-### Execution Log (`vm-nic-update-log.txt`)
+### Execution Log
 - **Console Output**: Color-coded messages (Errors=Red, Warnings=Yellow, Success=Green, Info=Blue)
 - **Log File**: Complete operation history with timestamps
-- **Default Location**: `.\vm-nic-update-log.txt`
+- **Automatic Naming**: `vm-nic-update-{ResourceGroup}.log` (extracted from CSV)
+- **Default Location**: `.\vm-nic-update-{ResourceGroup}.log`
+- **Per Resource Group**: Each resource group gets its own dedicated log file
+
+**Examples:**
+- Processing VMs in `RG-Production`: creates `vm-nic-update-RG-Production.log`
+- Processing VMs in `RG-EastUS`: creates `vm-nic-update-RG-EastUS.log`
+- Processing VMs in `rg-dev-westus`: creates `vm-nic-update-rg-dev-westus.log`
 
 **Log Levels:**
 - `INFO`: General informational messages
 - `SUCCESS`: Operation completed successfully
 - `WARNING`: Non-critical issues
 - `ERROR`: Critical failures
+
+**Custom Log Path:**
+You can override the automatic naming by specifying a custom log path:
+- PowerShell: `.\Update-VMNics.ps1 -CsvPath ".\vms.csv" -LogPath ".\custom-log.txt"`
+- Bash: `./update-vm-nics.sh ./vms.csv ./custom-log.txt`
 
 
 
@@ -280,11 +399,10 @@ After execution, the script generates:
 | Overhead | ~10 seconds | 6% |
 
 ### Optimized Performance
-- **Average time per VM**: 2-3 minutes (optimized from 5-15 minutes)
-- **Wait time**: 15 seconds (reduced from 2 minutes - **87.5% reduction**)
-- **Total improvement**: **40% faster** for batch operations
+- **Average time per VM**: 2-3 minutes
+- **Wait time**: 15 seconds
 
-**Example**: Processing 3 VMs takes ~8-9 minutes (down from ~14-15 minutes)
+**Example**: Processing 3 VMs takes ~8-9 minutes
 
 **Tip**: The script processes VMs sequentially. For large batches, consider splitting the CSV and running multiple instances in parallel.
 
@@ -313,6 +431,7 @@ After execution, the script generates:
 [2025-10-21 17:08:15] [INFO] Total VMs processed: 4
 [2025-10-21 17:08:15] [SUCCESS] Successful: 4
 [2025-10-21 17:08:15] [INFO] Failed: 0
+[2025-10-21 17:08:15] [INFO] Log file: .\vm-nic-update-RG-Production.log
 
 === Final VM Status ===
 

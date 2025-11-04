@@ -125,6 +125,19 @@ function Wait-VMState {
 }
 
 # Main script execution
+# Set log file based on resource group from first VM in CSV if not specified
+if ($LogPath -eq ".\vm-nic-update-log.txt") {
+    try {
+        $firstVM = Import-Csv -Path $CsvPath | Select-Object -First 1
+        if ($firstVM.ResourceGroup) {
+            $LogPath = ".\vm-nic-update-$($firstVM.ResourceGroup).log"
+        }
+    }
+    catch {
+        # Keep default if CSV read fails
+    }
+}
+
 Write-Log "========================================" -Level INFO
 Write-Log "Starting VM NIC Update Process" -Level INFO
 Write-Log "========================================" -Level INFO
@@ -347,15 +360,20 @@ foreach ($vm in $vms) {
         # Get an available IP from the subnet
         Write-Log "Querying subnet for available temporary IP..." -Level INFO
         $availableIPs = az network vnet subnet list-available-ips --ids $originalSubnetId --query "[0]" -o tsv 2>$null
-        if ($availableIPs) {
-            $tempIP = $availableIPs
-            Write-Log "Using available IP from subnet: $tempIP" -Level INFO
-        } else {
-            # Fallback to hash-based IP if query fails
-            $vmHash = [Math]::Abs($vmName.GetHashCode()) % 245 + 10
-            $tempIP = "10.0.0.$vmHash"
-            Write-Log "Using hash-based temporary IP: $tempIP" -Level WARNING
+        
+        if ([string]::IsNullOrWhiteSpace($availableIPs) -or $availableIPs -eq "null") {
+            Write-Log "Failed to retrieve available IP from subnet for VM: $vmName" -Level ERROR
+            Write-Log "Possible causes:" -Level ERROR
+            Write-Log "  - Subnet is full (no available IPs)" -Level ERROR
+            Write-Log "  - Azure API issue or insufficient permissions" -Level ERROR
+            Write-Log "  - Subnet configuration problem" -Level ERROR
+            Write-Log "Cannot proceed without a valid temporary IP address." -Level ERROR
+            $failureCount++
+            continue
         }
+        
+        $tempIP = $availableIPs
+        Write-Log "Using available IP from subnet: $tempIP" -Level INFO
         Write-Log "Creating new NIC: $newNicName with temporary IP: $tempIP" -Level INFO
         Write-Log "Will update to final IP ($newNicIP) after old NIC is detached and deleted" -Level INFO
         

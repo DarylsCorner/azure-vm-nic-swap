@@ -302,14 +302,19 @@ process_vm() {
     write_log "INFO" "Querying subnet for available temporary IP..."
     local temp_ip
     temp_ip=$(az network vnet subnet list-available-ips --ids "$original_subnet_id" --query "[0]" -o tsv 2>/dev/null | tr -d '[:space:]')
-    if [ -n "$temp_ip" ] && [ "$temp_ip" != "null" ]; then
-        write_log "INFO" "Using available IP from subnet: $temp_ip"
-    else
-        # Fallback to hash-based IP if query fails
-        local vm_hash=$(($(echo -n "$vm_name" | cksum | cut -d' ' -f1) % 245 + 10))
-        temp_ip="10.0.0.${vm_hash}"
-        write_log "WARNING" "Using hash-based temporary IP: $temp_ip"
+    
+    if [ -z "$temp_ip" ] || [ "$temp_ip" = "null" ]; then
+        write_log "ERROR" "Failed to retrieve available IP from subnet for VM: $vm_name"
+        write_log "ERROR" "Possible causes:"
+        write_log "ERROR" "  - Subnet is full (no available IPs)"
+        write_log "ERROR" "  - Azure API issue or insufficient permissions"
+        write_log "ERROR" "  - Subnet configuration problem"
+        write_log "ERROR" "Cannot proceed without a valid temporary IP address."
+        ((failure_count++))
+        return 1
     fi
+    
+    write_log "INFO" "Using available IP from subnet: $temp_ip"
     write_log "INFO" "Creating new NIC: $new_nic_name with temporary IP: $temp_ip"
     write_log "INFO" "Will update to final IP ($new_nic_ip) after old NIC is detached and deleted"
     
@@ -481,8 +486,18 @@ if [ $# -lt 1 ]; then
 fi
 
 CSV_FILE="$1"
+
+# Extract resource group from first VM in CSV to use in log filename
 if [ $# -ge 2 ]; then
     LOG_FILE="$2"
+else
+    # Read first data line (skip header) to get resource group
+    first_rg=$(awk -F',' 'NR==2 {print $2}' "$CSV_FILE" | tr -d '\r' | xargs)
+    if [ -n "$first_rg" ]; then
+        LOG_FILE="./vm-nic-update-${first_rg}.log"
+    else
+        LOG_FILE="./vm-nic-update-log.txt"
+    fi
 fi
 
 write_log "INFO" "========================================"
