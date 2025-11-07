@@ -1,5 +1,5 @@
-if [ -z "$1" ]; then
-    echo "Error: Resource group name is required"
+# Show help message
+if [ -z "$1" ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
     echo "Usage: $0 <resource-group-name> [output-file] [vm-filter]"
     echo ""
     echo "Arguments:"
@@ -11,7 +11,7 @@ if [ -z "$1" ]; then
     echo "Examples:"
     echo "  $0 RG-EastUS                           # All VMs, default CSV name (RG-EastUS-vms.csv)"
     echo "  $0 RG-EastUS my-vms.csv                # All VMs, custom CSV name"
-    echo "  $0 RG-EastUS my-vms.csv app           # Only VMs with 'app' in name"
+    echo "  $0 RG-EastUS my-vms.csv app            # Only VMs with 'app' in name"
     exit 1
 fi
 
