@@ -3,14 +3,15 @@ if [ -z "$1" ]; then
     echo "Usage: $0 <resource-group-name> [output-file] [vm-filter]"
     echo ""
     echo "Arguments:"
-    echo "  resource-group-name : Name of the Azure resource group"
-    echo "  output-file        : (Optional) Output CSV file name (default: <resource-group>-vms.csv)"
-    echo "  vm-filter          : (Optional) Filter VMs by name pattern (e.g., 'test', 'prod', 'app')"
+    echo "  resource-group-name : Name of the Azure resource group (required)"
+    echo "  output-file         : Output CSV file name (default: <resource-group>-vms.csv)"
+    echo "                        NOTE: Required if using vm-filter"
+    echo "  vm-filter           : Filter VMs by name pattern (e.g., 'test', 'prod', 'app')"
     echo ""
-    echo "Example:"
-    echo "  $0 RG-EastUS                    # All VMs in RG-EastUS"
-    echo "  $0 RG-EastUS my-vms.csv        # All VMs, custom output file"
-    echo "  $0 RG-EastUS my-vms.csv prod   # Only VMs with 'prod' in name"
+    echo "Examples:"
+    echo "  $0 RG-EastUS                           # All VMs, default CSV name (RG-EastUS-vms.csv)"
+    echo "  $0 RG-EastUS my-vms.csv                # All VMs, custom CSV name"
+    echo "  $0 RG-EastUS my-vms.csv app           # Only VMs with 'app' in name"
     exit 1
 fi
 
@@ -133,6 +134,8 @@ if [ $missing_secondary_ip -gt 0 ]; then
     echo "    --name ipconfig2 --private-ip-address <new-ip>"
     echo ""
     rm -f "$OUTPUT_FILE"
+    echo "⚠️  CSV file was NOT created due to validation errors."
+    echo ""
     exit 1
 fi
 
