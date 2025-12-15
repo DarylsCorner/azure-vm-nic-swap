@@ -1,0 +1,7 @@
+VMName,ResourceGroup,EnableAcceleratedNetworking
+testvm1,RG-EastUS,true
+testvm2,RG-EastUS,true
+testvm3,RG-EastUS,true
+testvm4,RG-EastUS-2,true
+testvm5,RG-EastUS-2,true
+testvm6,RG-EastUS-2,true

@@ -498,6 +498,100 @@ For issues or questions:
 2. Check Azure CLI documentation: https://docs.microsoft.com/en-us/cli/azure/
 3. Verify Azure permissions and quotas
 
+## Accelerated Networking Configuration Tool
+
+In addition to the full NIC swap functionality, this repository includes a standalone tool specifically for enabling/disabling accelerated networking on existing VMs **without performing a NIC replacement**.
+
+### When to Use This Tool
+
+Use the accelerated networking tool (`set-accelerated-networking.sh`) when you:
+- ✅ Want to enable/disable accelerated networking on existing NICs
+- ✅ Need to bulk-configure accelerated networking across multiple VMs
+- ✅ Want to avoid a full NIC swap operation
+- ❌ Do **NOT** need to change IP addresses or replace NICs
+
+**Note**: This tool **only modifies the accelerated networking setting** - it does not swap NICs or change IP addresses.
+
+### Accelerated Networking Tool Location
+
+The tool is located in the `accelerated-networking/` subfolder:
+- **Script**: `accelerated-networking/set-accelerated-networking.sh`
+- **Sample CSV**: `accelerated-networking/accelerated-networking-config.csv`
+
+### CSV Format for Accelerated Networking
+
+Create a CSV file with these columns:
+
+| Column | Description | Example |
+|--------|-------------|---------|
+| `VMName` | Name of the VM | testvm1 |
+| `ResourceGroup` | Resource group containing the VM | RG-EastUS |
+| `EnableAcceleratedNetworking` | `true` to enable, `false` to disable | true |
+
+**Sample CSV**:
+```csv
+VMName,ResourceGroup,EnableAcceleratedNetworking
+testvm1,RG-EastUS,true
+testvm2,RG-EastUS,true
+testvm3,RG-EastUS,false
+```
+
+### Usage
+
+```bash
+cd accelerated-networking
+bash set-accelerated-networking.sh accelerated-networking-config.csv
+```
+
+### Features
+
+✅ **Bulk Processing** - Configure multiple VMs from a single CSV file
+✅ **Smart Skip Logic** - Automatically skips VMs already in the desired state
+✅ **No VM Restart Required** - Changes take effect immediately without reboot
+✅ **Auto-Discovery** - Automatically finds the VM's NIC (no manual NIC name required)
+✅ **Detailed Summary** - Shows count of successful updates, skipped VMs, and errors
+
+### Example Output
+
+```
+Starting accelerated networking configuration...
+Reading from: accelerated-networking-config.csv
+
+Processing VM: testvm1 (Line: 2)
+  Getting NIC information...
+  Current accelerated networking: false
+  Target accelerated networking: true
+  Updating accelerated networking to true...
+  ✅ Successfully enabled accelerated networking on testvm1-nic-new
+
+Processing VM: testvm2 (Line: 3)
+  Getting NIC information...
+  Current accelerated networking: true
+  Target accelerated networking: true
+  ℹ️  No change needed - already set to true
+
+Processing VM: testvm3 (Line: 4)
+  Getting NIC information...
+  Current accelerated networking: true
+  Target accelerated networking: false
+  Updating accelerated networking to false...
+  ✅ Successfully disabled accelerated networking on testvm3-nic-new
+
+================================================
+Summary:
+  ✅ Successfully updated: 2 VM(s)
+  ⚠️  Skipped (no change needed or invalid value): 1 VM(s)
+  ❌ Failed: 0 VM(s)
+================================================
+```
+
+### Important Notes
+
+- **No VM Deallocation**: Unlike the full NIC swap, this tool does NOT require VM deallocation or restart
+- **Instant Effect**: Accelerated networking changes take effect immediately
+- **Independent Tool**: This tool operates completely independently from the NIC swap scripts
+- **Validation**: Only accepts `true` or `false` values for the `EnableAcceleratedNetworking` column
+
 ## License
 
 This script is provided as-is for use with Azure resources.
